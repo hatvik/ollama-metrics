@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
@@ -40,6 +41,13 @@ var (
 		},
 		[]string{"endpoint", "model"},
 	)
+	requestsPerIP = prometheus.NewCounterVec(
+        prometheus.CounterOpts{
+            Name: "ollama_client_requests_total",
+            Help: "Total number of requests handled by the proxy, labelled by client IP",
+        },
+        []string{"client_ip"},
+    )
 	timePerToken = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "ollama_time_per_token_seconds",
@@ -72,7 +80,7 @@ var (
 
 func init() {
 	// Register metrics with Prometheus default registry
-	prometheus.MustRegister(promptTokens, generatedTokens, requestDuration, timePerToken, loadedModelsGauge, loadedModelInfo, modelRAMUsage)
+	prometheus.MustRegister(promptTokens, generatedTokens, requestDuration, timePerToken, loadedModelsGauge, loadedModelInfo, modelRAMUsage, requestsPerIP)
 }
 
 // Structs to parse JSON responses from Ollama
@@ -137,6 +145,28 @@ func ensureModelTag(modelName string) string {
 		return modelName + ":latest"
 	}
 	return modelName
+}
+
+// getClientIP extracts the best‑guess (X-Real-IP > X-Forwarded-For > RemoteAddr.) client IP from the request.
+func getClientIP(r *http.Request) string {
+    // 1. X-Real-IP
+    if ip := r.Header.Get("X-Real-IP"); ip != "" {
+        return ip
+    }
+
+    // 2. X-Forwarded-For (may contain a list – pick the first)
+    if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+        // Trim spaces, take first entry
+        parts := strings.Split(fwd, ",")
+        return strings.TrimSpace(parts[0])
+    }
+
+    // 3. RemoteAddr (host:port)
+    host, _, err := net.SplitHostPort(r.RemoteAddr)
+    if err != nil {
+        return r.RemoteAddr // unlikely, but fallback
+    }
+    return host
 }
 
 func main() {
@@ -210,6 +240,11 @@ func main() {
 			promhttp.Handler().ServeHTTP(w, r)
 			return
 		}
+
+		// Read client IP
+		clientIP := getClientIP(r)
+		requestsPerIP.WithLabelValues(clientIP).Inc()
+		log.Printf("client=%s method=%s path=%s", clientIP, r.Method, r.URL.Path)
 
 		// Read request body (if any) for forwarding and possibly to inspect model parameter
 		var bodyBytes []byte
