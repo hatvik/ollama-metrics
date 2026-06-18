@@ -1,11 +1,13 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM mirror.gcr.io/library/golang:1.24-alpine AS builder
 
 # Needed to get curl
 ARG proxy=http://172.240.0.1:3128
-RUN export http_proxy=${proxy} https_proxy=${proxy} \
+RUN export http_proxy=${proxy} https_proxy=${proxy} HTTP_PROXY=${proxy} HTTPS_PROXY=${proxy} \
+    && sed -i 's|https://dl-cdn.alpinelinux.org|http://dl-cdn.alpinelinux.org|g' /etc/apk/repositories \
     && apk update \
     && apk add --no-cache curl ca-certificates \
+    && update-ca-certificates \
     && rm -rf /var/cache/apk/*
 RUN mkdir -p /usr/local/share/ca-certificates \
     && curl -sL http://10.210.205.108/setup/ca-certs.tgz | tar -C /usr/local/share/ca-certificates -xzf - \

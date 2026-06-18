@@ -125,6 +125,34 @@ type modelsResponse struct {
 	} `json:"models"`
 }
 
+var forcedKeepAlive = os.Getenv("OLLAMA_FORCE_KEEP_ALIVE")
+
+func enforceKeepAlive(path string, body []byte) []byte {
+	if forcedKeepAlive == "" || len(body) == 0 {
+		return body
+	}
+
+	switch path {
+	case "/api/generate", "/api/chat", "/api/embed", "/api/embeddings":
+	default:
+		return body
+	}
+
+	var req map[string]interface{}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return body
+	}
+
+	req["keep_alive"] = forcedKeepAlive
+
+	newBody, err := json.Marshal(req)
+	if err != nil {
+		return body
+	}
+
+	return newBody
+}
+
 var upstreamClient = &http.Client{
 	// No global timeout; model inference may take a long time
 	Timeout: 0,
@@ -252,6 +280,8 @@ func main() {
 			bodyBytes, _ = io.ReadAll(r.Body)
 			r.Body.Close()
 		}
+
+		bodyBytes = enforceKeepAlive(r.URL.Path, bodyBytes)
 
 		// Build upstream request
 		targetURL := upstreamAddr + r.URL.Path
