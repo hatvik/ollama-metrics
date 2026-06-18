@@ -42,12 +42,12 @@ var (
 		[]string{"endpoint", "model"},
 	)
 	requestsPerIP = prometheus.NewCounterVec(
-        prometheus.CounterOpts{
-            Name: "ollama_client_requests_total",
-            Help: "Total number of requests handled by the proxy, labelled by client IP",
-        },
-        []string{"client_ip"},
-    )
+		prometheus.CounterOpts{
+			Name: "ollama_client_requests_total",
+			Help: "Total number of requests handled by the proxy, labelled by client IP",
+		},
+		[]string{"client_ip"},
+	)
 	timePerToken = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "ollama_time_per_token_seconds",
@@ -100,7 +100,7 @@ type psResponse struct {
 	Models []struct {
 		Name      string `json:"name"`
 		ID        string `json:"id"`
-		Size      int64  `json:"size"`      // Size in bytes
+		Size      int64  `json:"size"` // Size in bytes
 		Processor string `json:"processor"`
 		Until     string `json:"until"`
 	} `json:"models"`
@@ -149,24 +149,24 @@ func ensureModelTag(modelName string) string {
 
 // getClientIP extracts the best‑guess (X-Real-IP > X-Forwarded-For > RemoteAddr.) client IP from the request.
 func getClientIP(r *http.Request) string {
-    // 1. X-Real-IP
-    if ip := r.Header.Get("X-Real-IP"); ip != "" {
-        return ip
-    }
+	// 1. X-Real-IP
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
 
-    // 2. X-Forwarded-For (may contain a list – pick the first)
-    if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-        // Trim spaces, take first entry
-        parts := strings.Split(fwd, ",")
-        return strings.TrimSpace(parts[0])
-    }
+	// 2. X-Forwarded-For (may contain a list – pick the first)
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		// Trim spaces, take first entry
+		parts := strings.Split(fwd, ",")
+		return strings.TrimSpace(parts[0])
+	}
 
-    // 3. RemoteAddr (host:port)
-    host, _, err := net.SplitHostPort(r.RemoteAddr)
-    if err != nil {
-        return r.RemoteAddr // unlikely, but fallback
-    }
-    return host
+	// 3. RemoteAddr (host:port)
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr // unlikely, but fallback
+	}
+	return host
 }
 
 func main() {
@@ -198,7 +198,7 @@ func main() {
 
 	// Set up HTTP handlers
 	mux := http.NewServeMux()
-	
+
 	// Custom metrics handler that refreshes model data before serving metrics
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		// Refresh model information from /api/ps before serving metrics
@@ -210,12 +210,12 @@ func main() {
 				loadedModelsGauge.Set(float64(len(ps.Models)))
 				loadedModelInfo.Reset()
 				modelRAMUsage.Reset() // Reset RAM usage before updating
-				
+
 				// Update model metrics directly from ps response
 				for _, m := range ps.Models {
 					modelName := ensureModelTag(m.Name)
 					loadedModelInfo.WithLabelValues(modelName).Set(1)
-					
+
 					// Convert size from bytes to megabytes
 					ramMB := float64(m.Size) / (1024 * 1024)
 					modelRAMUsage.WithLabelValues(modelName).Set(ramMB)
@@ -227,11 +227,11 @@ func main() {
 		} else {
 			log.Printf("ERROR refreshing model metrics: %v", err)
 		}
-		
+
 		// Serve metrics using the standard Prometheus handler
 		promhttp.Handler().ServeHTTP(w, r)
 	})
-	
+
 	// All other paths -> proxy handler
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -384,13 +384,13 @@ func main() {
 				loadedModelsGauge.Set(float64(len(ps.Models)))
 				loadedModelInfo.Reset()
 				modelRAMUsage.Reset() // Reset RAM usage before updating
-				
+
 				// Update model metrics directly from ps response
 				for _, m := range ps.Models {
 					modelName := ensureModelTag(m.Name)
 					loadedModelInfo.WithLabelValues(modelName).Set(1)
-					
-						// Convert size from bytes to megabytes
+
+					// Convert size from bytes to megabytes
 					ramMB := float64(m.Size) / (1024 * 1024)
 					modelRAMUsage.WithLabelValues(modelName).Set(ramMB)
 					log.Printf("Model %s RAM usage: %.2f MB", modelName, ramMB)
